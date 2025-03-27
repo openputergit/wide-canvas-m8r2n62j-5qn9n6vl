@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Shift Management System</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .neubrutalism {
+            border: 3px solid black;
+            box-shadow: 5px 5px 0px black;
+            transition: all 0.2s ease;
+        }
+        .neubrutalism:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 7px 7px 0px black;
+        }
+        .neubrutalism:active {
+            transform: translate(0, 0);
+            box-shadow: 3px 3px 0px black;
+        }
+        .shift-card {
+            background: #ffffff;
+            margin: 10px;
+            padding: 15px;
+        }
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+        }
+        th, td {
+            border: 2px solid black;
+            padding: 8px;
+        }
+        .shift-label {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .weekend-marker {
+            background-color: #ffe0e0;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 5px;
+            z-index: 1000;
+            animation: fadeOut 3s forwards;
+            opacity: 1;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; display: none; }
+        }
+        .employee-tag {
+            transition: all 0.3s ease;
+        }
+        .employee-tag:hover {
+            transform: translateY(-2px);
+        }
+        
+        /* Responsive table styles */
+        @media (max-width: 768px) {
+            .responsive-table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .pagination-buttons {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body class="bg-blue-100 p-4">
+    <div id="app">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+                <h1 class="text-4xl font-bold neubrutalism bg-yellow-300 p-4 inline-block mb-4 md:mb-0">Shift Management System</h1>
+                <div>
+                    <button @click="generateSchedule" class="neubrutalism bg-green-300 px-4 py-2 mr-2 mb-2 md:mb-0">
+                        <i class="bi bi-arrow-clockwise mr-1"></i> Refresh Schedule
+                    </button>
+                    <button @click="rotateShifts" class="neubrutalism bg-purple-300 px-4 py-2">
+                        <i class="bi bi-arrow-repeat mr-1"></i> Rotate Shifts
+                    </button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <!-- Current Week Schedule -->
+                <div class="md:col-span-8 neubrutalism bg-white p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold">Current Week Schedule</h2>
+                        <div class="flex space-x-2">
+                            <button @click="previousWeek" class="neubrutalism bg-gray-200 px-3 py-1">
+                                <i class="bi bi-chevron-left"></i>
+                            </button>
+                            <span class="font-semibold">{{ weekRange }}</span>
+                            <button @click="nextWeek" class="neubrutalism bg-gray-200 px-3 py-1">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="responsive-table-container">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th>Day</th>
+                                    <th>Date</th>
+                                    <th>Shift Details</th>
+                                    <th>Assigned Employees</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="day in currentWeekSchedule" :key="day.date" :class="{'weekend-marker': day.isWeekend}">
+                                    <td class="font-semibold">{{ day.dayName }}</td>
+                                    <td>{{ day.date }}</td>
+                                    <td>
+                                        <div v-for="shift in day.shifts" :key="shift.time" class="mb-1">
+                                            <span class="shift-label" :style="getShiftColor(shift.time)">
+                                                {{ shift.time }}
+                                            </span>
+                                            <span class="text-xs ml-2">({{ shift.required }} needed)</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div v-for="(assignedShift, index) in day.assignedShifts" :key="index" class="mb-2">
+                                            <div class="flex flex-wrap">
+                                                <span class="shift-label text-sm mr-2" :style="getShiftColor(assignedShift.shift)">
+                                                    {{ assignedShift.shift }}
+                                                </span>
+                                                <div v-for="emp in assignedShift.employees" :key="emp" class="bg-blue-100 px-2 py-1 text-xs rounded m-1">
+                                                    {{ emp }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Shift Management -->
+                <div class="md:col-span-4">
+                    <div class="neubrutalism bg-white p-4 mb-4">
+                        <h2 class="text-2xl font-bold mb-4">Shift Management</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <h3 class="text-xl font-bold mb-2">Add Employee</h3>
+                                <div class="flex flex-col md:flex-row space-y-2 md:space-y-0">
+                                    <input v-model="newEmployee" type="text" placeholder="Employee Name" 
+                                        class="neubrutalism p-2 mr-2 flex-grow">
+                                    <button @click="addEmployee" class="neubrutalism bg-blue-300 px-4 py-2">
+                                        <i class="bi bi-plus-lg mr-1"></i> Add
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h3 class="text-xl font-bold mb-2">Current Rotation Cycle</h3>
+                                <div class="neubrutalism bg-gray-100 p-3">
+                                    <p class="font-medium">Week {{ rotationWeek }} of 2-week cycle</p>
+                                    <p>Next rotation in: {{ 14 - ((rotationWeek - 1) * 7 + currentDayOfCycle) }} days</p>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h3 class="text-xl font-bold mb-2">Team Stats</h3>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="neubrutalism bg-blue-200 p-2 text-center">
+                                        <p class="text-2xl font-bold">{{ employees.length }}</p>
+                                        <p class="text-sm">Team Members</p>
+                                    </div>
+                                    <div class="neubrutalism bg-green-200 p-2 text-center">
+                                        <p class="text-2xl font-bold">{{ getTotalShiftsRequired() }}</p>
+                                        <p class="text-sm">Weekly Shifts</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="neubrutalism bg-white p-4">
+                        <h3 class="text-xl font-bold mb-2">Shift Requirements</h3>
+                        <div class="space-y-2">
+                            <div v-for="(requirements, type) in shiftRequirements" :key="type">
+                                <h4 class="font-semibold">{{ type === 'weekday' ? 'Weekdays' : type.charAt(0).toUpperCase() + type.slice(1) }}</h4>
+                                <div v-for="req in requirements" :key="req.time" class="flex justify-between text-sm p-1 border-b">
+                                    <span class="shift-label" :style="getShiftColor(req.time)">{{ req.time }}</span>
+                                    <span>{{ req.required }} team members</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Employee List -->
+            <div class="mt-8 neubrutalism bg-white p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold">Employee List ({{ employees.length }})</h2>
+                    <div class="flex space-x-2">
+                        <div class="relative">
+                            <input v-model="searchEmployee" type="text" placeholder="Search employees..." 
+                                class="neubrutalism p-2">
+                            <i class="bi bi-search absolute right-3 top-3 text-gray-400"></i>
+                        </div>
+                        <select v-model="employeesPerPage" class="neubrutalism p-2">
+                            <option :value="12">12 per page</option>
+                            <option :value="24">24 per page</option>
+                            <option :value="36">36 per page</option>
+                            <option :value="employees.length">All</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    <div v-for="employee in paginatedEmployees" :key="employee.name" 
+                        class="neubrutalism bg-gray-100 p-2 employee-tag">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium">{{ employee.name }}</span>
+                            <button @click="removeEmployee(employee.name)" class="text-red-500 hover:text-red-700">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
+                        <div class="mt-2">
+                            <span class="shift-label text-xs" :style="getShiftColor(employee.currentShift)">
+                                {{ employee.currentShift }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="pagination-buttons mt-4 flex justify-center space-x-1">
+                    <button 
+                        v-for="page in totalPages" 
+                        :key="page" 
+                        @click="currentPage = page"
+                        :class="[
+                            'px-3 py-1 rounded', 
+                            currentPage === page ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
+                        ]"
+                    >
+                        {{ page }}
+                    </button>
+                </div>
+            </div>
+            
+            <div v-if="notification" class="notification neubrutalism" :class="notification.type">
+                {{ notification.message }}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    employees: [
+                        { name: 'John Smith', currentShift: '7:00 AM - 4:00 PM', rotationPosition: 0, daysOff: [] },
+                        { name: 'Emily Johnson', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Michael Brown', currentShift: '3:00 PM - 12:00 AM', rotationPosition: 2, daysOff: [] },
+                        { name: 'Jessica Davis', currentShift: '6:00 PM - 3:00 AM', rotationPosition: 3, daysOff: [] },
+                        { name: 'David Miller', currentShift: '9:30 PM - 6:30 AM', rotationPosition: 4, daysOff: [] },
+                        { name: 'Sarah Wilson', currentShift: '10:30 PM - 7:30 AM', rotationPosition: 5, daysOff: [] },
+                        { name: 'Robert Moore', currentShift: '7:00 AM - 4:00 PM', rotationPosition: 0, daysOff: [] },
+                        { name: 'Jennifer Taylor', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'William Anderson', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Elizabeth Thomas', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Christopher Jackson', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Amanda White', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Daniel Harris', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Matthew Martin', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Andrew Thompson', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Ryan Garcia', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Kevin Rodriguez', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Stephanie Martinez', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Rebecca Lewis', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] },
+                        { name: 'Laura Walker', currentShift: '9:00 AM - 6:00 PM', rotationPosition: 1, daysOff: [] }
+                    ],
+                    newEmployee: '',
+                    shiftSequence: [
+                        '7:00 AM - 4:00 PM',
+                        '9:00 AM - 6:00 PM',
+                        '3:00 PM - 12:00 AM',
+                        '6:00 PM - 3:00 AM',
+                        '9:30 PM - 6:30 AM',
+                        '10:30 PM - 7:30 AM'
+                    ],
+                    shiftRequirements: {
+                        weekday: [
+                            { time: '7:00 AM - 4:00 PM', required: 2 },
+                            { time: '9:00 AM - 6:00 PM', required: 25 },
+                            { time: '3:00 PM - 12:00 AM', required: 3 },
+                            { time: '6:00 PM - 3:00 AM', required: 8 },
+                            { time: '9:30 PM - 6:30 AM', required: 1 },
+                            { time: '10:30 PM - 7:30 AM', required: 1 }
+                        ],
+                        saturday: [
+                            { time: '7:00 AM - 4:00 PM', required: 1 },
+                            { time: '3:00 PM - 12:00 AM', required: 1 },
+                            { time: '9:30 PM - 6:30 AM', required: 1 }
+                        ],
+                        sunday: [
+                            { time: '7:00 AM - 4:00 PM', required: 1 },
+                            { time: '9:30 PM - 6:30 AM', required: 1 }
+                        ]
+                    },
+                    currentWeekSchedule: [],
+                    rotationWeek: 1, // 1 or 2
+                    currentDayOfCycle: 1, // 1-14
+                    rotationStartDate: new Date(),
+                    viewDate: new Date(), // Date to view schedule for
+                    notification: null,
+                    searchEmployee: '',
+                    currentPage: 1,
+                    employeesPerPage: 12
+                }
+            },
+            computed: {
+                weekRange() {
+                    const startOfWeek = new Date(this.viewDate)
+                    startOfWeek.setDate(this.viewDate.getDate() - this.viewDate.getDay())
+                    
+                    const endOfWeek = new Date(startOfWeek)
+                    endOfWeek.setDate(startOfWeek.getDate() + 6)
+                    
+                    const options = { month: 'short', day: 'numeric' }
+                    return `${startOfWeek.toLocaleDateString('en-US', options)} - ${endOfWeek.toLocaleDateString('en-US', options)}`
+                },
+                filteredEmployees() {
+                    if (!this.searchEmployee) return this.employees
+                    
+                    const searchLower = this.searchEmployee.toLowerCase()
+                    return this.employees.filter(emp => 
+                        emp.name.toLowerCase().includes(searchLower) || 
+                        emp.currentShift.toLowerCase().includes(searchLower)
+                    )
+                },
+                totalPages() {
+                    return Math.ceil(this.filteredEmployees.length / this.employeesPerPage)
+                },
+                paginatedEmployees() {
+                    const start = (this.currentPage - 1) * this.employeesPerPage
+                    const end = start + this.employeesPerPage
+                    return this.filteredEmployees.slice(start, end)
+                }
+            },
+            methods: {
+                addEmployee() {
+                    if (this.newEmployee.trim()) {
+                        // Assign a shift based on current needs
+                        const newEmp = {
+                            name: this.newEmployee.trim(),
+                            currentShift: this.determineInitialShift(),
+                            rotationPosition: this.determineRotationPosition(),
+                            daysOff: []
+                        }
+                        
+                        this.employees.push(newEmp)
+                        this.newEmployee = ''
+                        this.showNotification(`Added ${newEmp.name} to the team`, 'bg-green-200')
+                        this.generateSchedule()
+                    }
+                },
+                removeEmployee(name) {
+                    const index = this.employees.findIndex(emp => emp.name === name)
+                    if (index !== -1) {
+                        const removedEmployee = this.employees[index]
+                        this.employees.splice(index, 1)
+                        this.showNotification(`Removed ${removedEmployee.name} from the team`, 'bg-red-200')
+                        this.generateSchedule()
+                    }
+                },
+                determineInitialShift() {
+                    // Basic logic to assign initial shift based on team needs
+                    const shiftCounts = {}
+                    this.shiftSequence.forEach(shift => {
+                        shiftCounts[shift] = this.employees.filter(emp => emp.currentShift === shift).length
+                    })
+                    
+                    // Find the shift with the least people compared to requirements
+                    let bestShift = this.shiftSequence[0]
+                    let lowestRatio = Infinity
+                    
+                    this.shiftRequirements.weekday.forEach(req => {
+                        const currentCount = shiftCounts[req.time] || 0
+                        const ratio = currentCount / req.required
+                        if (ratio < lowestRatio) {
+                            lowestRatio = ratio
+                            bestShift = req.time
+                        }
+                    })
+                    
+                    return bestShift
+                },
+                determineRotationPosition() {
+                    return this.shiftSequence.indexOf(this.determineInitialShift())
+                },
+                rotateShifts() {
+                    // Rotate every employee to their next shift in the sequence
+                    this.employees.forEach(employee => {
+                        const currentIndex = this.shiftSequence.indexOf(employee.currentShift)
+                        const nextIndex = (currentIndex + 1) % this.shiftSequence.length
+                        employee.currentShift = this.shiftSequence[nextIndex]
+                        employee.rotationPosition = nextIndex
+                    })
+                    
+                    // Update rotation cycle
+                    this.rotationWeek = 1
+                    this.currentDayOfCycle = 1
+                    this.rotationStartDate = new Date()
+                    
+                    this.showNotification('Shifts have been rotated for all employees', 'bg-purple-200')
+                    this.generateSchedule()
+                },
+                generateSchedule() {
+                    const schedule = []
+                    const startOfWeek = new Date(this.viewDate)
+                    startOfWeek.setDate(this.viewDate.getDate() - this.viewDate.getDay()) // Sunday
+                    
+                    for (let i = 0; i < 7; i++) {
+                        const currentDate = new Date(startOfWeek)
+                        currentDate.setDate(startOfWeek.getDate() + i)
+                        const dayOfWeek = currentDate.getDay() // 0 = Sunday, 6 = Saturday
+                        
+                        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+                        const dayType = dayOfWeek === 0 ? 'sunday' : dayOfWeek === 6 ? 'saturday' : 'weekday'
+                        
+                        const shifts = this.shiftRequirements[dayType]
+                        
+                        // Generate assigned shifts
+                        const assignedShifts = []
+                        
+                        shifts.forEach(shiftReq => {
+                            const eligibleEmployees = this.employees.filter(emp => 
+                                emp.currentShift === shiftReq.time && 
+                                !emp.daysOff.includes(dayOfWeek)
+                            )
+                            
+                            // Take required number of employees
+                            const assigned = eligibleEmployees.slice(0, shiftReq.required)
+                            
+                            assignedShifts.push({
+                                shift: shiftReq.time,
+                                employees: assigned.map(emp => emp.name)
+                            })
+                        })
+                        
+                        const daySchedule = {
+                            dayName: currentDate.toLocaleDateString('en-US', { weekday: 'long' }),
+                            date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                            shifts: shifts,
+                            assignedShifts: assignedShifts,
+                            isWeekend: isWeekend
+                        }
+                        
+                        schedule.push(daySchedule)
+                    }
+                    
+                    this.currentWeekSchedule = schedule
+                },
+                nextWeek() {
+                    const newDate = new Date(this.viewDate)
+                    newDate.setDate(newDate.getDate() + 7)
+                    this.viewDate = newDate
+                    this.generateSchedule()
+                },
+                previousWeek() {
+                    const newDate = new Date(this.viewDate)
+                    newDate.setDate(newDate.getDate() - 7)
+                    this.viewDate = newDate
+                    this.generateSchedule()
+                },
+                getShiftsForDay(day) {
+                    // Return appropriate shifts based on day (0 = Sunday, 6 = Saturday)
+                    if (day === 0) return this.shiftRequirements.sunday
+                    if (day === 6) return this.shiftRequirements.saturday
+                    return this.shiftRequirements.weekday
+                },
+                getShiftColor(shiftTime) {
+                    // Generate colors based on shift time
+                    const colorMap = {
+                        '7:00 AM - 4:00 PM': 'background-color: #e6f7ff; color: #0066cc;',
+                        '9:00 AM - 6:00 PM': 'background-color: #fff2e6; color: #cc6600;',
+                        '3:00 PM - 12:00 AM': 'background-color: #f2e6ff; color: #6600cc;',
+                        '6:00 PM - 3:00 AM': 'background-color: #e6fff2; color: #00cc66;',
+                        '9:30 PM - 6:30 AM': 'background-color: #ffe6e6; color: #cc0000;',
+                        '10:30 PM - 7:30 AM': 'background-color: #f2f2f2; color: #333333;'
+                    }
+                    
+                    return colorMap[shiftTime] || 'background-color: #f2f2f2; color: #333333;'
+                },
+                showNotification(message, type) {
+                    this.notification = { message, type }
+                    setTimeout(() => {
+                        this.notification = null
+                    }, 3000)
+                },
+                getTotalShiftsRequired() {
+                    let total = 0
+                    
+                    // Weekdays (5 days)
+                    this.shiftRequirements.weekday.forEach(shift => {
+                        total += shift.required * 5
+                    })
+                    
+                    // Saturday
+                    this.shiftRequirements.saturday.forEach(shift => {
+                        total += shift.required
+                    })
+                    
+                    // Sunday
+                    this.shiftRequirements.sunday.forEach(shift => {
+                        total += shift.required
+                    })
+                    
+                    return total
+                },
+                generateInitialEmployees() {
+                    // Fill team with remaining employees to reach 38
+                    const additionalNeeded = 38 - this.employees.length
+                    
+                    if (additionalNeeded > 0) {
+                        for (let i = 1; i <= additionalNeeded; i++) {
+                            const name = `Team Member ${this.employees.length + i}`
+                            const shift = this.determineInitialShift()
+                            const position = this.shiftSequence.indexOf(shift)
+                            
+                            this.employees.push({
+                                name,
+                                currentShift: shift,
+                                rotationPosition: position,
+                                daysOff: []
+                            })
+                        }
+                    }
+                }
+            },
+            mounted() {
+                this.generateInitialEmployees()
+                this.generateSchedule()
+                
+                // Calculate current day in rotation cycle
+                const today = new Date()
+                const diffTime = Math.abs(today - this.rotationStartDate)
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                this.currentDayOfCycle = (diffDays % 14) + 1
+                this.rotationWeek = this.currentDayOfCycle > 7 ? 2 : 1
+            },
+            watch: {
+                searchEmployee() {
+                    this.currentPage = 1
+                }
+            }
+        }).mount('#app')
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
